@@ -1,5 +1,3 @@
-# requirements
-# requests, feedparser, traceback, Pillow
 import cv2
 import numpy as np
 import os
@@ -14,13 +12,17 @@ import requests
 import traceback
 import feedparser
 from bs4 import BeautifulSoup
-from PIL import Image, ImageTk
-from contextlib import contextmanager
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
+from PIL import Image, ImageTk
+from contextlib import contextmanager
+import math
+from datetime import date, timedelta
 
 LOCALE_LOCK = threading.Lock()
+
+
 
 ui_locale = ''  # e.g. 'fr_FR' fro French, '' as default
 time_format = 24  # 12 or 24
@@ -28,13 +30,15 @@ date_format = "%b %d, %Y"  # check python doc for strftime() for options
 news_country_code = 'us'
 xlarge_text_size = 94
 large_text_size = 48
-medium_text_size = 18
+medium_text_size = 24
 small_text_size = 12
 medium_small_text_size = 16
 
-cred = credentials.Certificate("C:/Users/ZENBOOK/Raspberry-Pi-Module/faceAuth/serviceAccountKey.json")
-app = firebase_admin.initialize_app(cred)
-db = firestore.client()
+cred = credentials.Certificate("../faceAuth/serviceAccountKey.json")  #path to your service account key
+app = firebase_admin.initialize_app(cred)  #initialize firebase
+db = firestore.client()  #initialize firestore
+api_key = "c8759b62d883f490862a5363692aef41"  #api key for openweathermap
+base_url = "http://api.openweathermap.org/data/2.5/weather?"  #api url
 
 
 @contextmanager
@@ -47,27 +51,25 @@ def setlocale(name):  # thread proof function to work with locale
             locale.setlocale(locale.LC_ALL, saved)
 
 
-# maps open weather icons to
-# icon reading is not impacted by the 'lang' parameter
 
 
-class authenticationModule:
+class authenticationModule:    #class for authentication
 
-    def train_dataset(self):
+    def train_dataset(self):  # function to Train dataset
 
         config = {
             "apiKey": "AIzaSyATJUWiR18Mfc_Yrd4CTAqZVwn-pVpXnno",
             "authDomain": "signin-example-b3f10.firebaseapp.com",
             "databaseURL": "https://signin-example-b3f10-default-rtdb.firebaseio.com",
             "storageBucket": "signin-example-b3f10.appspot.com",
-            "serviceAccount": "C:/Users/ZENBOOK/Raspberry-Pi-Module/faceAuth/serviceAccountKey.json"
+            "serviceAccount": "../faceAuth/serviceAccountKey.json"
         }
 
-        firebase = Firebase(config)
-        store = firebase.storage()
+        firebase = Firebase(config)  # initialize firebase
+        store = firebase.storage() # initialize firebase storage
 
         os.environ[
-            "GOOGLE_APPLICATION_CREDENTIALS"] = "C:/Users/ZENBOOK/Raspberry-Pi-Module/faceAuth/serviceAccountKey.json"
+            "GOOGLE_APPLICATION_CREDENTIALS"] = "../faceAuth/serviceAccountKey.json"
 
         storage_client = storage.Client()
         bucket = "signin-example-b3f10.appspot.com"
@@ -75,76 +77,83 @@ class authenticationModule:
         bucket = storage_client.get_bucket(bucket)
         blobs = list(bucket.list_blobs())
         for blob in blobs:
-            store.child(blob.name).download("C:/Users/ZENBOOK/Raspberry-Pi-Module/train/" + blob.name[5:] + ".jpeg")
+            store.child(blob.name).download("../RaspberryPi-Module/Train/" + blob.name[5:] + ".jpeg")
 
-    def faceAuthentication(self):
-        cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    def faceAuthentication(self):  # function to authenticate face
+        cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # initialize camera
         cam.set(3, 640)  # set video width
         cam.set(4, 480)  # set video height
 
-        face_detector = cv2.CascadeClassifier(
+        face_detector = cv2.CascadeClassifier(   # initialize face detector
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml")  # Loading the required haar-cascade xml classifier file
         count = 0
+        t_end= time.time() + 60  # set time limit for authentication
 
-        while (True):
+        while (time.time()<t_end):
 
-            ret, img = cam.read()
+            ret, img = cam.read()  # read camera frame
             # img = cv2.flip(img, -1) # flip video image vertically
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # convert to grayscale
             faces = face_detector.detectMultiScale(gray, 1.3,
                                                    5)  # Detects objects of different sizes in the input image. The detected objects are returned as a list of rectangles.
 
             for (x, y, w, h) in faces:
                 count += 1
-                cv2.imwrite("C:/Users/ZENBOOK/Raspberry-Pi-Module/test/compared.jpg",
+                cv2.imwrite("Test/compared.jpg",
                             gray[y:y + h, x:x + w])  # Save the captured image into the datasets folder
 
-            if count >= 10:  # Take 30 face sample and stop video
+            if count >= 30:  # Take 30 face sample and stop video
                 break
 
-        cam.release()
-        cv2.destroyAllWindows()
+        cam.release() # turn off camera
+        cv2.destroyAllWindows()  # remove window
+        if count ==0:
+            return "Unknown Person"
+        path = "../RaspberryPi-Module/Train/"
 
-        path = "C:/Users/ZENBOOK/Raspberry-Pi-Module/train/"
+        known_names = []  # Initialize known face name
+        known_name_encodings = []       # Initialize known face encodings
 
-        known_names = []
-        known_name_encodings = []
-
-        images = os.listdir(path)
-        for _ in images:
+        images = os.listdir(path) # Get the list of all the available images
+        for _ in images:     # Loop over the list of all the available images
             image = fr.load_image_file(path + _)
             image_path = path + _
             encoding = fr.face_encodings(image)[0]
             known_name_encodings.append(encoding)
-            known_names.append(os.path.splitext(os.path.basename(image_path))[0])
+            known_names.append(os.path.splitext(os.path.basename(image_path))[0])      # Append the name of the image to the list of known names
 
-        test_image = "C:/Users/ZENBOOK/Raspberry-Pi-Module/test/compared.jpg"
+        test_image = "../RaspberryPi-Module/Test/compared.jpg"    # Load the Test image
 
-        image = cv2.imread(test_image)
-        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.imread(test_image) # Read the Test image
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert the image to RGB
 
-        face_locations = fr.face_locations(image)
-        face_encodings = fr.face_encodings(image, face_locations)
+        face_locations = fr.face_locations(image)    # Find all the faces in the Test image
+        face_encodings = fr.face_encodings(image, face_locations)       # Find all the face encodings in the Test image
 
-        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-            matches = fr.compare_faces(known_name_encodings, face_encoding, tolerance=0.5)
+        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):    # Loop over all the faces in the Test image
+            matches = fr.compare_faces(known_name_encodings, face_encoding, tolerance=0.5)   # Determine if the face is a match for the known face or not
             userID = "Unknown Person"
 
-            face_distances = fr.face_distance(known_name_encodings, face_encoding)
-            best_match = np.argmin(face_distances)
+            face_distances = fr.face_distance(known_name_encodings, face_encoding)    # Find the face with the smallest distance to the Test face
+            best_match = np.argmin(face_distances)   # Get the index of the face with the smallest distance to the Test face
 
-            if matches[best_match]:
-                userID = known_names[best_match]
+            if matches[best_match]:      # Check if the face with the smallest distance to the Test face is a match
+                userID = known_names[best_match]  # If so, get the name of the corresponding person
+
+        dir = '../RaspberryPi-Module/Train/'
+        for f in os.listdir(dir):
+            os.remove(os.path.join(dir, f))
 
         return userID
-        # userID = name
 
 
-class Database(object):
+
+class Database(object):     #class for database
     def __init__(self, userID):
-        document = db.collection("Person").document(userID)
-        data = document.get().to_dict()
+        document = db.collection("Person").document(userID)    # Get the document of the user
+        data = document.get().to_dict()      # Get the data of the user
 
+        self.defaultScreen = data["defaultScreen"]
         self.time_widget = data["time_widget"]
         self.weather_widget = data["weather_widget"]
         self.motivational_widget = data["motivational_widget"]
@@ -159,26 +168,18 @@ class Database(object):
         self.reminder2 = data["reminder2"]
         self.reminder3 = data["reminder3"]
         self.name_value = data["userName"]
+        self.birthdate = data["birth"]
+        star = data["birth"]
+        star = str(star)
+        firstThree = star[5:10] #take birtday in mm-dd format
+        print(firstThree)
+        self.birthdate = firstThree
+        # today = date.today()
+        # d1 = today.strftime("%m-%d")
+        # print("d1 =", d1)
 
-    # document = db.collection("Person").document(userID)
-    # data = document.get().to_dict()
-
-    # Widgets that are coming from database
-    # They are saved from Smart Mirror Application
-    # time_widget = data["time_widget"]
-    # weather_widget = data["weather_widget"]
-    # motivational_widget = data["motivational_widget"]
-    # date_widget = data["date_widget"]
-    # daily_widget = data["daily_widget"]
-    # exchange_widget = data["exchange_widget"]
-    # reminder_widget = data["reminder_widget"]
-    # welcome_widget = data["welcome_widget"]
-    # food_widget = data["food_widget"]
-    # cityName = data["country"]
-    # reminder1 = data["reminder1"]
-    # reminder2 = data["reminder2"]
-    # reminder3 = data["reminder3"]
-    # name_value = data["userName"]
+    def get_birthday(self):
+        return self.birthdate
 
     def get_cityName(self):
         return self.cityName
@@ -209,7 +210,6 @@ class Database(object):
 
     def get_food_widget(self):
         return self.food_widget
-        # setter method
 
     def get_welcome_widget(self):
         return self.welcome_widget
@@ -223,8 +223,7 @@ class Database(object):
     def get_daily_widget(self):
         return self.daily_widget
 
-
-class Clock(Frame):
+class Clock(Frame):        #class for clock
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
         # initialize time label
@@ -263,49 +262,93 @@ class Clock(Frame):
                 self.date1 = date2
                 self.dateLbl.config(text=date2)
             # calls itself every 200 milliseconds
-            # to update the time display as needed
-            # could use >200 ms, but display gets jerky
             self.timeLbl.after(200, self.tick)
 
 
-class Calendar(Frame):
+class ClockDefault(Frame):
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
-        self.title = 'Calendar Events'
-        self.calendarLbl = Label(self, text=self.title, font=('Segoe UI Light', medium_text_size), fg="white",
-                                 bg="black")
-        self.calendarLbl.pack(side=TOP, anchor=W)
-        self.calendarEventContainer = Frame(self, bg='black')
-        self.calendarEventContainer.pack(side=TOP, anchor=W)
-        self.get_events()
+        # initialize time label
+        self.time1 = ''
+        self.timeLbl = Label(self, font=('Segoe UI Light', xlarge_text_size, "bold"), fg="white", bg="black")
+        self.timeLbl.pack(side=TOP, anchor=W)
+        # initialize day of week
+        self.day_of_week1 = ''
+        self.dayOWLbl = Label(self, text=self.day_of_week1, font=('Segoe UI Light', large_text_size), fg="white",
+                              bg="black")
+        self.dayOWLbl.pack(side=TOP, anchor=W)
+        # initialize date label
+        self.date1 = ''
+        self.dateLbl = Label(self, text=self.date1, font=('Segoe UI Light', large_text_size), fg="white",
+                             bg="black")
+        self.dateLbl.pack(side=TOP, anchor=W)
+        self.tick()
+
+    def tick(self):
+        with setlocale(ui_locale):
+            if time_format == 12:
+                time2 = time.strftime('%I:%M %p')  # hour in 12h format
+            else:
+                time2 = time.strftime('%H:%M')  # hour in 24h format
+
+            day_of_week2 = time.strftime('%A')
+            date2 = time.strftime(date_format)
+            # if time string has changed, update it
+            if time2 != self.time1:
+                self.time1 = time2
+                self.timeLbl.config(text=time2)
+            if day_of_week2 != self.day_of_week1:
+                self.day_of_week1 = day_of_week2
+                self.dayOWLbl.config(text=day_of_week2)
+            if date2 != self.date1:
+                self.date1 = date2
+                self.dateLbl.config(text=date2)
+            # calls itself every 200 milliseconds
+            self.timeLbl.after(200, self.tick)
 
 
-class Weather(Frame):
-    def __init__(self, parent, *args, **kwargs):
+
+
+#reference: https://www.codemag.com/Article/1511071/Building-a-Weather-App-using-OpenWeatherMap-and-AFNetworking
+class Weather(Frame):          #class for weather
+    def __init__(self, parent,mirror, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
-        cityName = Database().get_cityName()
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        city = cityName + 'weather'  # this will be from the db
-        res = requests.get(
-            f'https://www.google.com/search?q={city}&oq={city}&aqs=chrome.0.35i39l2j0l4j46j69i60.6128j1j7&sourceid=chrome&ie=UTF-8',
-            headers=headers)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        info = soup.select('#wob_dc')[0].getText().strip()
-        weather = soup.select('#wob_tm')[0].getText().strip()
-        # weather
-        self.weather = weather + "Â°C"
+        cityName = mirror.get_cityName()
+        complete_url = base_url + "appid=" + api_key + "&q=" + cityName  # url for weather api
+        response = requests.get(complete_url) # get request
+        x = response.json() # json format
+        if x["cod"] != "404":
+            y = x["main"]
+            current_temperature = y["temp"]
+            current_temperature = math.ceil(current_temperature - 273.15)
+            max_celsius = y["temp_max"]
+            max_celsius = math.ceil(max_celsius - 273.15)
+            min_celsius = y["temp_min"]
+            min_celsius = math.floor(min_celsius - 273.15)
+            z = x["weather"]
+            weather_description = z[0]["description"]
+        else:
+            print(" City Not Found ")
+
+            # store the value corresponding
+        self.weather = str(current_temperature) + "°C"     #temperature
         self.weatherLbl = Label(self, text=self.weather, font=('Segoe UI Light', medium_text_size), fg="white",
                                 bg='black')
         self.weatherLbl.pack(side=TOP, anchor=E)
+
+        self.weather = str(min_celsius) + "°C" + " / "  + str(max_celsius) + "°C"       #min and max temperature
+        self.weatherLbl = Label(self, text=self.weather, font=('Segoe UI Light', medium_small_text_size), fg="white",
+                                bg='black')
+        self.weatherLbl.pack(side=TOP, anchor=E)
+
         # weather information
-        self.weatherInfo = info
+        self.weatherInfo = str(weather_description).capitalize()      #weather description
         self.weatherInfoLbl = Label(self, text=self.weatherInfo, font=('Segoe UI Light', medium_text_size), fg="white",
                                     bg='black')
         self.weatherInfoLbl.pack(side=TOP, anchor=E)
 
 
-class News(Frame):
+class News(Frame):       #class for news
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, *args, **kwargs)
         self.config(bg='black')
@@ -321,14 +364,14 @@ class News(Frame):
             # remove all children
             for widget in self.headlinesContainer.winfo_children():
                 widget.destroy()
-            if news_country_code == None:
+            if news_country_code == None:     #if country code is not selected
                 headlines_url = "https://news.google.com/news?ned=us&output=rss"
             else:
-                headlines_url = "https://news.google.com/news?ned=%s&output=rss" % news_country_code
+                headlines_url = "https://news.google.com/news?ned=%s&output=rss" % news_country_code      #url for news api
 
             feed = feedparser.parse(headlines_url)
 
-            for post in feed.entries[0:5]:
+            for post in feed.entries[0:5]:      # only show the first 5 posts
                 headline = NewsHeadline(self.headlinesContainer, post.title)
                 headline.pack(side=TOP, anchor=W)
         except Exception as e:
@@ -338,12 +381,13 @@ class News(Frame):
         self.after(600000, self.get_headlines)
 
 
-class NewsHeadline(Frame):
+class NewsHeadline(Frame):      #class for news headlines image
     def __init__(self, parent, event_name=""):
         Frame.__init__(self, parent, bg='black')
 
-        image = Image.open("Newspaper1.png")
-        image = image.resize((20, 20), Image.ANTIALIAS)
+        image = Image.open("../Assets/Newspaper.png")
+        newsize = (20, 20)
+        image = image.resize(newsize)
         image = image.convert('RGB')
         photo = ImageTk.PhotoImage(image)
 
@@ -357,9 +401,11 @@ class NewsHeadline(Frame):
         self.eventNameLbl.pack(side=LEFT, anchor=N)
 
 
-class WelcomeMessage(Frame):
-    def __init__(self, parent, *args, **kwargs):
+class WelcomeMessage(Frame):      #class for welcome message
+    def __init__(self, parent,mirror, *args, **kwargs):
+
         Frame.__init__(self, parent, bg='black')
+
         self.title = 'Welcome Message'
         self.welcome_frm = Frame(self, bg="black")
         self.welcome_frm.pack(side=TOP, anchor=W)
@@ -367,16 +413,24 @@ class WelcomeMessage(Frame):
         self.nameLbl = Label(self.welcome_frm, font=('Segoe UI Light', medium_small_text_size), fg="white", bg="black")
         self.nameLbl.pack(side=TOP, anchor=N)
 
-        self.get_welcome_message()
+        self.get_welcome_message(mirror)
 
-    def get_welcome_message(self):
-        name_value = Database().get_name_value()
-        user_name = ("Hello " + name_value + "!")
+    def get_welcome_message(self, mirror):
+        birthdate = mirror.get_birthday()
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        d1 = yesterday.strftime("%m-%d")
+        name_value = mirror.get_name_value()       #get name value
+        if(d1 == birthdate):
+            user_name = ("Happy Birthday " + name_value + "!")
+        else:
+            user_name = ("Hello " + name_value + "!")
 
         self.nameLbl.config(text=user_name)
 
 
-class Stock(Frame):
+class Stock(Frame):     #class for stock
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
 
@@ -408,9 +462,9 @@ class Stock(Frame):
             euro_print = ''
             gold_print = ''
             gbp_print = ''
-            r = requests.get("https://www.doviz.com")
-            soup = BeautifulSoup(r.content, "html.parser")
-            stockdata = soup.find_all('span', attrs={'class': 'value'})
+            r = requests.get("https://www.doviz.com")     #get stock value from doviz.com
+            soup = BeautifulSoup(r.content, "html.parser")    #parse the html
+            stockdata = soup.find_all('span', attrs={'class': 'value'})      #find all span tags with class value
 
             goldval = stockdata[0].text
             dolarval = stockdata[1].text
@@ -442,7 +496,7 @@ class Stock(Frame):
             print('no internet')
 
 
-class foodReq(Frame):
+class foodReq(Frame):     #class for food reccomendation
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
         self.foodLbl = Label(self, font=('Segoe UI Light', small_text_size), fg="white", bg="black")
@@ -452,10 +506,10 @@ class foodReq(Frame):
         self.get_foodheadlines()
 
     def get_foodheadlines(self):
-        filename = 'C:/Users/ZENBOOK/Raspberry-Pi-Module/db/food1.csv'
+        filename = '../Database/Food.csv'  #get food headlines from csv file
         for widget in self.fheadlinesContainer.winfo_children():
             widget.destroy()
-        with open(filename) as f:
+        with open(filename) as f:    #read csv file
             reader = f.readlines()
             chosen_row = random.choice(reader)
             self.chosen_row = chosen_row
@@ -463,7 +517,7 @@ class foodReq(Frame):
             foodrec.pack(side=TOP, anchor=E)
 
 
-class MotivationalText(Frame):
+class MotivationalText(Frame):    #class for motivational text
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
 
@@ -483,7 +537,7 @@ class MotivationalText(Frame):
 
     def get_MotivationalHeadlines(self):
 
-        filename = 'C:/Users/ZENBOOK/Raspberry-Pi-Module/db/quotes.csv'
+        filename = '../Database/Motivational.csv'  #get motivational text from csv file
         for widget in self.quoteLbl.winfo_children():
             widget.destroy()
         with open(filename) as f:
@@ -493,8 +547,8 @@ class MotivationalText(Frame):
             while chosen_row[i] != ",":
                 i = i + 1
 
-            if len(chosen_row[i + 1:]) <= 100:
-                self.str_text = chosen_row[i + 1:] + "\n" + "-" + chosen_row[:i]
+            if len(chosen_row[i + 1:]) <= 100:    #if the text is less than 100 characters
+                self.str_text = chosen_row[i + 1:] + "\n" + "-" + chosen_row[:i] #add author name to the end of the text
                 self.feventNameLbl = Label(self, text=self.str_text, font=('Segoe UI Light', small_text_size),
                                            fg="white",
                                            bg="black")
@@ -503,12 +557,13 @@ class MotivationalText(Frame):
                 self.get_MotivationalHeadlines()
 
 
-class FoodHeadline(Frame):
+class FoodHeadline(Frame):   #class for food reccomendation image
     def __init__(self, parent, chosen_row=""):
         Frame.__init__(self, parent, bg='black')
 
-        image = Image.open("foodicon.png")
-        image = image.resize((20, 20), Image.ANTIALIAS)
+        image = Image.open("../Assets/Foodicon.png") #open food icon image
+        newsize = (20, 20)
+        image = image.resize(newsize)
         image = image.convert('RGB')
         photo = ImageTk.PhotoImage(image)
 
@@ -522,13 +577,13 @@ class FoodHeadline(Frame):
         self.feventNameLbl.pack(side=LEFT, anchor=NW)
 
 
-class Reminder(Frame):
-    def __init__(self, parent, *args, **kwargs):
+class Reminder(Frame):   #class for reminders
+    def __init__(self, parent,mirror, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
 
-        reminder1 = Database().get_reminder1()
-        reminder2 = Database().get_reminder2()
-        reminder3 = Database().get_reminder3()
+        reminder1 = mirror.get_reminder1()  #get reminders from database
+        reminder2 = mirror.get_reminder2()
+        reminder3 = mirror.get_reminder3()
 
         self.r1 = ("-" + reminder1)
 
@@ -544,53 +599,8 @@ class Reminder(Frame):
         self.r3Lbl.pack(side=TOP, anchor=E)
 
 
-'''
-class MotivationalText(Frame):
-
-    def __init__(self, parent, *args, **kwargs):
-        Frame.__init__(self, parent, bg='black')
-
-        self.quotetext = ''
-        self.authortext = ''
-
-        self.quote_frm = Frame(self, bg="black")
-        self.quote_frm.pack(side=TOP, anchor=W)
-
-        self.quoteLbl = Label(self.quote_frm, font=('Segoe UI Light', small_text_size), fg="white", bg="black")
-        self.quoteLbl.pack(side=TOP, anchor=W)
-
-        self.authorLbl = Label(self.quote_frm, font=('Segoe UI Light', small_text_size), fg="white", bg="black")
-        self.authorLbl.pack(side=TOP, anchor=W)
-
-        self.get_motivational_quote()
-
-    def get_motivational_quote(self):
-        try:
-
-            response = requests.get("http://api.forismatic.com/api/1.0/?method=getQuote&format=json&lang=en")
-            json_resp = response.json()
-            quotevar = json_resp["quoteText"]
-            authorvar = json_resp["quoteAuthor"]
-            print((quotevar))
-
-            quote_print = quotevar
-            author_print = authorvar
-
-            if self.quotetext != None:
-                self.quotetext = quote_print
-                self.quoteLbl.config(text=quote_print)
-
-            if self.authortext != None:
-                self.authortext = author_print
-                self.authorLbl.config(text=author_print)
-
-        except IOError:
-            print('no internet')
-'''
-
-
-class FullscreenWindow(object):
-    def __init__(self,mirror):
+class DefaultScreen():  #class for default screen
+    def __init__(self):
         self.tk = Tk()
         self.tk.configure(background='black')
         self.topFrame = Frame(self.tk, background='black')
@@ -602,23 +612,56 @@ class FullscreenWindow(object):
         self.middleFrame.pack(side=LEFT, fill=BOTH, expand=YES)
         self.middle2Frame.pack(side=RIGHT, fill=BOTH, expand=YES)
 
-        # Necessary for maximizing the screen...
-        self.tk.attributes('-fullscreen',
-                           True)
-        self.frame = Frame(self.tk)
-        self.frame.pack()
-        self.state = False
-        self.tk.bind("<F11>", self.toggle_fullscreen)
-        self.tk.bind("<Escape>", self.end_fullscreen)
+        # #Necessary for maximizing the screen...
+        # self.tk.attributes('-fullscreen',
+        #                    True)
+        # self.frame = Frame(self.tk)
+        # self.frame.pack()
+        # self.state = False
+        # self.tk.bind("<F11>", self.toggle_fullscreen)
+        # self.tk.bind("<Escape>", self.end_fullscreen)
 
-        # mirror.time_widget = Database().get_time_widget()
-        # mirror.weather_widget = Database().get_weather_widget()
-        # mirror.daily_widget = Database().get_daily_widget()
-        # mirror.reminder_widget = Database().get_reminder_widget()
-        # mirror.motivational_widget = Database().get_motivational_widget()
-        # mirror.exchange_widget = Database().get_exchange_widget()
-        # mirror.food_widget = Database().get_food_widget()
-        # mirror.welcome_widget = Database().get_welcome_widget()
+
+        self.clock = ClockDefault(self.middleFrame)
+        self.clock.pack(side=TOP,  padx=50, pady=50)
+
+    def toggle_fullscreen(self, event=None):
+        self.state = not self.state  # Just toggling the boolean
+        self.tk.attributes("-fullscreen", self.state)
+        return "break"
+
+    def end_fullscreen(self, event=None):
+        self.state = False
+        self.tk.attributes("-fullscreen", False)
+        return "break"
+
+class FullscreenWindow(object): #class for fullscreen window
+    def __init__(self,mirror):
+        self.tk=Tk()
+
+        self.tk.configure(background='black')
+        self.topFrame = Frame(self.tk, background='black')     #top frame
+        self.bottomFrame = Frame(self.tk, background='black') #bottom frame
+        self.middleFrame = Frame(self.tk, background='black') #middle frame
+        self.middle2Frame = Frame(self.tk, background='black') #middle2 frame
+        self.topFrame.pack(side=TOP, fill=BOTH, expand=YES)   #pack top frame
+        self.bottomFrame.pack(side=BOTTOM, fill=BOTH, expand=YES) #pack bottom frame
+        self.middleFrame.pack(side=LEFT, fill=BOTH, expand=YES)     #pack middle frame
+        self.middle2Frame.pack(side=RIGHT, fill=BOTH, expand=YES)   #pack middle2 frame
+
+        #Necessary for maximizing the screen...
+        # self.tk.attributes('-fullscreen',
+        #                    True)
+        # self.frame = Frame(self.tk)
+        # self.frame.pack()
+        # self.state = False
+        # self.tk.bind("<F11>", self.toggle_fullscreen)
+        # self.tk.bind("<Escape>", self.end_fullscreen)
+
+        if(mirror.defaultScreen == 'true'):
+            self.clock = ClockDefault(self.middleFrame)
+            self.clock.pack(side=TOP, padx=50, pady=50)
+
 
         if (mirror.time_widget == 'true'):
             # clock
@@ -627,7 +670,7 @@ class FullscreenWindow(object):
 
         # weather
         if (mirror.weather_widget == 'true'):
-            self.weather = Weather(self.topFrame)
+            self.weather = Weather(self.topFrame,mirror)
             self.weather.pack(side=RIGHT, anchor=NE, padx=50, pady=60)
 
         # news
@@ -637,13 +680,13 @@ class FullscreenWindow(object):
 
         # reminder
         if (mirror.reminder_widget == 'true'):
-            self.reminder = Reminder(self.middle2Frame)
+            self.reminder = Reminder(self.middle2Frame,mirror)
             self.reminder.pack(side=RIGHT, padx=(0, 50), pady=50)
 
         # motivational
         if (mirror.motivational_widget == 'true'):
             self.quote = MotivationalText(self.middleFrame)
-            self.quote.pack(anchor=SW, padx=50, pady=50)
+            self.quote.pack(anchor=SW, padx=50, pady=70)
 
         # stock
         if (mirror.exchange_widget == 'true'):
@@ -657,7 +700,7 @@ class FullscreenWindow(object):
 
         # welcome message
         if (mirror.welcome_widget == 'true'):
-            self.welcome = WelcomeMessage(self.topFrame)
+            self.welcome = WelcomeMessage(self.topFrame,mirror)
             self.welcome.pack(padx=0, pady=50)
 
     def toggle_fullscreen(self, event=None):
@@ -671,24 +714,36 @@ class FullscreenWindow(object):
         return "break"
 
 
-# if __name__ == '__main__':
-#     w = FullscreenWindow()
-#     w.tk.mainloop()
+def faceRecog():
+    authenticationModule().train_dataset()  # Train dataset
+    userID = authenticationModule().faceAuthentication()  # face recognition
+    return userID
+
 
 
 if __name__ == '__main__':
     while TRUE:
-        authenticationModule().train_dataset()
-        userID = authenticationModule().faceAuthentication()
-        database = Database(userID)
-        print(database.get_name_value())
-        mirror = FullscreenWindow(database)
-        mirror.tk.mainloop()
-        # t_end = time.time() + 60 * 0.5
-        # while time.time() < t_end:
-        #     print(time.time(), t_end)
-        #     w = FullscreenWindow()
-        #     w.tk.mainloop()
 
-    # w = FullscreenWindow()
-    # w.tk.mainloop()
+        print("basla")
+        w = DefaultScreen()  # default screen
+
+        w.tk.update()  # update the screen
+        st = time.time()
+
+        userID = faceRecog()  # face recognition
+
+        print(userID)
+        if userID == "Unknown Person":  # if face recognition is not successful
+            userID = 'G9yt3NPxWDQgSHXh9H6RedhnBGh1'  # default user
+
+        database = Database(userID)  # database
+        print(database.get_name_value())  # get name value
+        w.tk.destroy()  # destroy the screen
+
+        mirror = FullscreenWindow(database)  # fullscreen window
+        mirror.tk.update()  # update the screen
+        et = time.time()
+        elapsed_time = et - st
+        print('Execution time:', elapsed_time, 'seconds')
+        time.sleep(50)  # sleep for 50 seconds
+        mirror.tk.destroy()  # destroy the screen
