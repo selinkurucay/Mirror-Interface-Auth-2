@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+from os import listdir
 import face_recognition as fr
 from firebase import Firebase
 from google.cloud import storage
@@ -64,7 +65,7 @@ class authenticationModule:    #class for authentication
             "storageBucket": "signin-example-b3f10.appspot.com",
             "serviceAccount": "../faceAuth/serviceAccountKey.json"
         }
-
+ 
         firebase = Firebase(config)  # initialize firebase
         store = firebase.storage() # initialize firebase storage
 
@@ -99,7 +100,7 @@ class authenticationModule:    #class for authentication
 
             for (x, y, w, h) in faces:
                 count += 1
-                cv2.imwrite("Test/compared.jpg",
+                cv2.imwrite("../RaspberryPi-Module/Test/compared.jpg",
                             gray[y:y + h, x:x + w])  # Save the captured image into the datasets folder
 
             if count >= 30:  # Take 30 face sample and stop video
@@ -140,9 +141,9 @@ class authenticationModule:    #class for authentication
             if matches[best_match]:      # Check if the face with the smallest distance to the Test face is a match
                 userID = known_names[best_match]  # If so, get the name of the corresponding person
 
-        dir = '../RaspberryPi-Module/Train/'
-        for f in os.listdir(dir):
-            os.remove(os.path.join(dir, f))
+            else:
+                userID = "Unknown Person"
+
 
         return userID
 
@@ -336,10 +337,6 @@ class Weather(Frame):          #class for weather
                                 bg='black')
         self.weatherLbl.pack(side=TOP, anchor=E)
 
-        self.weather = str(min_celsius) + "°C" + " / "  + str(max_celsius) + "°C"       #min and max temperature
-        self.weatherLbl = Label(self, text=self.weather, font=('Segoe UI Light', medium_small_text_size), fg="white",
-                                bg='black')
-        self.weatherLbl.pack(side=TOP, anchor=E)
 
         # weather information
         self.weatherInfo = str(weather_description).capitalize()      #weather description
@@ -385,15 +382,7 @@ class NewsHeadline(Frame):      #class for news headlines image
     def __init__(self, parent, event_name=""):
         Frame.__init__(self, parent, bg='black')
 
-        image = Image.open("../Assets/Newspaper.png")
-        newsize = (20, 20)
-        image = image.resize(newsize)
-        image = image.convert('RGB')
-        photo = ImageTk.PhotoImage(image)
 
-        self.iconLbl = Label(self, bg='black', image=photo)
-        self.iconLbl.image = photo
-        self.iconLbl.pack(side=LEFT, anchor=N)
 
         self.eventName = event_name
         self.eventNameLbl = Label(self, text=self.eventName, font=('Segoe UI Light', small_text_size), fg="white",
@@ -516,6 +505,15 @@ class foodReq(Frame):     #class for food reccomendation
             foodrec = FoodHeadline(self.fheadlinesContainer, chosen_row)
             foodrec.pack(side=TOP, anchor=E)
 
+class FoodHeadline(Frame):   #class for food reccomendation image
+    def __init__(self, parent, chosen_row=""):
+        Frame.__init__(self, parent, bg='black')
+
+
+        self.chosen_row = chosen_row
+        self.feventNameLbl = Label(self, text=self.chosen_row, font=('Segoe UI Light', small_text_size), fg="white",
+                                   bg="black")
+        self.feventNameLbl.pack(side=LEFT, anchor=NW)
 
 class MotivationalText(Frame):    #class for motivational text
     def __init__(self, parent, *args, **kwargs):
@@ -557,24 +555,6 @@ class MotivationalText(Frame):    #class for motivational text
                 self.get_MotivationalHeadlines()
 
 
-class FoodHeadline(Frame):   #class for food reccomendation image
-    def __init__(self, parent, chosen_row=""):
-        Frame.__init__(self, parent, bg='black')
-
-        image = Image.open("../Assets/Foodicon.png") #open food icon image
-        newsize = (20, 20)
-        image = image.resize(newsize)
-        image = image.convert('RGB')
-        photo = ImageTk.PhotoImage(image)
-
-        self.ficonLbl = Label(self, bg='black', image=photo)
-        self.ficonLbl.image = photo
-        self.ficonLbl.pack(side=LEFT, anchor=NW)
-
-        self.chosen_row = chosen_row
-        self.feventNameLbl = Label(self, text=self.chosen_row, font=('Segoe UI Light', small_text_size), fg="white",
-                                   bg="black")
-        self.feventNameLbl.pack(side=LEFT, anchor=NW)
 
 
 class Reminder(Frame):   #class for reminders
@@ -598,6 +578,31 @@ class Reminder(Frame):   #class for reminders
         self.r3Lbl = Label(self, text=self.r3, font=('Segoe UI Light', small_text_size), fg="white", bg="black")
         self.r3Lbl.pack(side=TOP, anchor=E)
 
+class blackScreen():  #class for default screen
+    def __init__(self):
+        self.tk = Tk()
+        self.tk.configure(background='black')
+
+
+        #Necessary for maximizing the screen...
+        self.tk.attributes('-fullscreen',
+                           True)
+        self.frame = Frame(self.tk)
+        self.frame.pack()
+        self.state = False
+        self.tk.bind("<F11>", self.toggle_fullscreen)
+        self.tk.bind("<Escape>", self.end_fullscreen)
+
+
+    def toggle_fullscreen(self, event=None):
+        self.state = not self.state  # Just toggling the boolean
+        self.tk.attributes("-fullscreen", self.state)
+        return "break"
+
+    def end_fullscreen(self, event=None):
+        self.state = False
+        self.tk.attributes("-fullscreen", False)
+        return "break"
 
 class DefaultScreen():  #class for default screen
     def __init__(self):
@@ -613,13 +618,13 @@ class DefaultScreen():  #class for default screen
         self.middle2Frame.pack(side=RIGHT, fill=BOTH, expand=YES)
 
         # #Necessary for maximizing the screen...
-        # self.tk.attributes('-fullscreen',
-        #                    True)
-        # self.frame = Frame(self.tk)
-        # self.frame.pack()
-        # self.state = False
-        # self.tk.bind("<F11>", self.toggle_fullscreen)
-        # self.tk.bind("<Escape>", self.end_fullscreen)
+        self.tk.attributes('-fullscreen',
+                           True)
+        self.frame = Frame(self.tk)
+        self.frame.pack()
+        self.state = False
+        self.tk.bind("<F11>", self.toggle_fullscreen)
+        self.tk.bind("<Escape>", self.end_fullscreen)
 
 
         self.clock = ClockDefault(self.middleFrame)
@@ -650,13 +655,13 @@ class FullscreenWindow(object): #class for fullscreen window
         self.middle2Frame.pack(side=RIGHT, fill=BOTH, expand=YES)   #pack middle2 frame
 
         #Necessary for maximizing the screen...
-        # self.tk.attributes('-fullscreen',
-        #                    True)
-        # self.frame = Frame(self.tk)
-        # self.frame.pack()
-        # self.state = False
-        # self.tk.bind("<F11>", self.toggle_fullscreen)
-        # self.tk.bind("<Escape>", self.end_fullscreen)
+        self.tk.attributes('-fullscreen',
+                           True)
+        self.frame = Frame(self.tk)
+        self.frame.pack()
+        self.state = False
+        self.tk.bind("<F11>", self.toggle_fullscreen)
+        self.tk.bind("<Escape>", self.end_fullscreen)
 
         if(mirror.defaultScreen == 'true'):
             self.clock = ClockDefault(self.middleFrame)
@@ -722,28 +727,32 @@ def faceRecog():
 
 
 if __name__ == '__main__':
+    z = blackScreen()
+    z.tk.update()
     while TRUE:
+        dizin = '../RaspberryPi-Module/Train/'
+        my_path = '../RaspberryPi-Module/Train/'
+        for file_name in listdir(my_path):
+            if file_name.endswith('.txt'):
+                os.remove(my_path + file_name)
 
-        print("basla")
-        w = DefaultScreen()  # default screen
 
-        w.tk.update()  # update the screen
-        st = time.time()
+        w = DefaultScreen() #default screen
 
+        w.tk.update() #update the screen
+        #time.sleep(50)
         userID = faceRecog()  # face recognition
 
         print(userID)
         if userID == "Unknown Person":  # if face recognition is not successful
             userID = 'G9yt3NPxWDQgSHXh9H6RedhnBGh1'  # default user
 
-        database = Database(userID)  # database
-        print(database.get_name_value())  # get name value
-        w.tk.destroy()  # destroy the screen
+        database = Database(userID) #database
+        print(database.get_name_value()) #get name value
+        w.tk.destroy() #destroy the screen
 
-        mirror = FullscreenWindow(database)  # fullscreen window
-        mirror.tk.update()  # update the screen
-        et = time.time()
-        elapsed_time = et - st
-        print('Execution time:', elapsed_time, 'seconds')
-        time.sleep(50)  # sleep for 50 seconds
-        mirror.tk.destroy()  # destroy the screen
+        mirror = FullscreenWindow(database) #fullscreen window
+        mirror.tk.update() #update the screen
+        time.sleep(10) #sleep for 50 seconds
+        mirror.tk.destroy() #destroy the screen
+
