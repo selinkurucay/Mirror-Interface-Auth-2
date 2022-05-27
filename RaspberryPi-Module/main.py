@@ -65,7 +65,7 @@ class authenticationModule:    #class for authentication
             "storageBucket": "signin-example-b3f10.appspot.com",
             "serviceAccount": "../faceAuth/serviceAccountKey.json"
         }
- 
+
         firebase = Firebase(config)  # initialize firebase
         store = firebase.storage() # initialize firebase storage
 
@@ -144,8 +144,14 @@ class authenticationModule:    #class for authentication
             else:
                 userID = "Unknown Person"
 
-
-        return userID
+        try:
+            return userID
+        except UnboundLocalError as error:
+            # Output expected UnboundLocalErrors.
+            return "Unknown Person"
+        except Exception as exception:
+            # Output unexpected Exceptions.
+            return "Unknown Person"
 
 
 
