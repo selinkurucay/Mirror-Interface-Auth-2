@@ -42,6 +42,7 @@ api_key = "c8759b62d883f490862a5363692aef41"  #api key for openweathermap
 base_url = "http://api.openweathermap.org/data/2.5/weather?"  #api url
 
 
+
 @contextmanager
 def setlocale(name):  # thread proof function to work with locale
     with LOCALE_LOCK:
@@ -264,9 +265,12 @@ class Clock(Frame):        #class for clock
                 self.timeLbl.config(text=time2)
             if day_of_week2 != self.day_of_week1:
                 self.day_of_week1 = day_of_week2
+                if(str(day_of_week2) == 'Pazar'):
+                    day_of_week2 = 'Sunday'
                 self.dayOWLbl.config(text=day_of_week2)
             if date2 != self.date1:
                 self.date1 = date2
+
                 self.dateLbl.config(text=date2)
             # calls itself every 200 milliseconds
             self.timeLbl.after(200, self.tick)
@@ -306,9 +310,12 @@ class ClockDefault(Frame):
                 self.timeLbl.config(text=time2)
             if day_of_week2 != self.day_of_week1:
                 self.day_of_week1 = day_of_week2
+                if(str(day_of_week2) == 'Pazar'):
+                    day_of_week2 = 'Sunday'
                 self.dayOWLbl.config(text=day_of_week2)
             if date2 != self.date1:
                 self.date1 = date2
+
                 self.dateLbl.config(text=date2)
             # calls itself every 200 milliseconds
             self.timeLbl.after(200, self.tick)
@@ -647,6 +654,9 @@ class DefaultScreen():  #class for default screen
         return "break"
 
 class FullscreenWindow(object): #class for fullscreen window
+
+
+
     def __init__(self,mirror):
         self.tk=Tk()
 
@@ -726,9 +736,12 @@ class FullscreenWindow(object): #class for fullscreen window
 
 
 def faceRecog():
+
     authenticationModule().train_dataset()  # Train dataset
     userID = authenticationModule().faceAuthentication()  # face recognition
     return userID
+
+
 
 
 
@@ -736,17 +749,15 @@ if __name__ == '__main__':
     z = blackScreen()
     z.tk.update()
     while TRUE:
-        dizin = '../RaspberryPi-Module/Train/'
-        my_path = '../RaspberryPi-Module/Train/'
-        for file_name in listdir(my_path):
-            if file_name.endswith('.txt'):
-                os.remove(my_path + file_name)
+
+
 
 
         w = DefaultScreen() #default screen
 
         w.tk.update() #update the screen
         #time.sleep(50)
+        st = time.time()
         userID = faceRecog()  # face recognition
 
         print(userID)
@@ -759,6 +770,11 @@ if __name__ == '__main__':
 
         mirror = FullscreenWindow(database) #fullscreen window
         mirror.tk.update() #update the screen
-        time.sleep(10) #sleep for 50 seconds
+
+        et = time.time()
+        elapsed_time = et - st
+        print('Execution time:', elapsed_time, 'seconds')
+
+        time.sleep(50) #sleep for 50 seconds
         mirror.tk.destroy() #destroy the screen
 
